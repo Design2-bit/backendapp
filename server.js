@@ -446,12 +446,15 @@ app.post("/send", (req, res) => {
   const topicConfig = Object.values(TOPICS).find(t => t.name === topic);
   const qos = topicConfig ? topicConfig.qos : 0;
 
-  mqttClient.publish(topic, message, { qos }, (err) => {
+ // Convert message to string if it's an object
+  const messageString = typeof message === 'object' ? JSON.stringify(message) : message;
+  
+  mqttClient.publish(topic, messageString, { qos }, (err) => {
     if (err) {
       return res.status(500).json({ error: "Failed to publish message" });
     }
-    console.log(`📤 Sent: ${topic} - ${message}`);
-    res.json({ success: true, topic, message, qos });
+    console.log(`📤 Sent: ${topic} - ${messageString}`);
+    res.json({ success: true, topic, message: messageString, qos });
   });
 });
 
