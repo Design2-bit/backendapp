@@ -80,11 +80,13 @@ mqttClient.on("connect", () => {
 mqttClient.on("message", (topic, message) => {
   const msg = message.toString();
   console.log(`📩 MQTT [${topic}]: ${msg}`);
+  console.log(`🔍 Message received at:`, new Date().toISOString());
   
   try {
     const data = JSON.parse(msg);
     console.log(`🔍 Parsed data:`, data);
-    console.log(`🔍 Topic match check: ${topic} === ${TOPICS.STATUS.name} = ${topic === TOPICS.STATUS.name}`);
+    console.log(`🔍 Topic match check: ${topic} === ${TOPICS.TASKS.name} = ${topic === TOPICS.TASKS.name}`);
+    console.log(`🔍 Available topics:`, Object.values(TOPICS).map(t => t.name));
     handleMqttMessage(topic, data);
   } catch (err) {
     console.log(`❌ JSON Parse Error:`, err);
@@ -434,6 +436,14 @@ app.get("/mission/status", async (req, res) => {
   }
 });
 
+// Test MQTT connection
+app.get("/mqtt/test", (req, res) => {
+  res.json({
+    mqttConnected: mqttClient.connected,
+    topics: Object.values(TOPICS).map(t => t.name)
+  });
+});
+
 // Generic send route (for testing)
 app.post("/send", (req, res) => {
   const { topic, message } = req.body;
@@ -446,7 +456,7 @@ app.post("/send", (req, res) => {
   const topicConfig = Object.values(TOPICS).find(t => t.name === topic);
   const qos = topicConfig ? topicConfig.qos : 0;
 
- // Convert message to string if it's an object
+  // Convert message to string if it's an object
   const messageString = typeof message === 'object' ? JSON.stringify(message) : message;
   
   mqttClient.publish(topic, messageString, { qos }, (err) => {
