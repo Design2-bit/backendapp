@@ -145,7 +145,7 @@ async function handleStatusFromMCU(data) {
     // Keep only last 20 status records
     const statusCount = await RobotStatus.countDocuments();
     if (statusCount > 20) {
-      const statusToDelete = statusCount - 20;
+      const statusToDelete = statusCount - 10;
       const oldestStatus = await RobotStatus.find().sort({ lastUpdated: 1 }).limit(statusToDelete);
       const idsToDelete = oldestStatus.map(status => status._id);
       await RobotStatus.deleteMany({ _id: { $in: idsToDelete } });
@@ -242,7 +242,7 @@ async function createAlert(type, message, severity = 'info', data = null) {
   // Keep only latest 50 alerts in database
   const alertCount = await Alert.countDocuments();
   if (alertCount > 50) {
-    const alertsToDelete = alertCount - 50;
+    const alertsToDelete = alertCount - 10;
     const oldestAlerts = await Alert.find().sort({ createdAt: 1 }).limit(alertsToDelete);
     const idsToDelete = oldestAlerts.map(alert => alert._id);
     await Alert.deleteMany({ _id: { $in: idsToDelete } });
