@@ -4,6 +4,8 @@ const express = require("express");
 const mongoose = require("mongoose");
 const mqtt = require("mqtt");
 const cors = require("cors");
+const http = require('http');
+const socketIo = require('socket.io');
 
 const authRoutes = require("./routes/auth");
 const profileRoutes = require("./routes/profile");
@@ -14,6 +16,13 @@ const RobotStatus = require('./models/RobotStatus');
 const Alert = require('./models/Alert');
 
 const app = express();
+const server = http.createServer(app);
+const io = socketIo(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
 
 // --- Middleware ---
 app.use(cors());
@@ -142,6 +151,9 @@ async function handleStatusFromMCU(data) {
     
     console.log(`✅ Robot status saved:`, status);
     
+    // 🔴 EMIT LIVE DATA TO ALL CONNECTED CLIENTS
+    io.emit('robotStatus', status);
+    
     // Keep only last 20 status records
     const statusCount = await RobotStatus.countDocuments();
     if (statusCount > 20) {
@@ -180,12 +192,16 @@ async function handleTaskUpdateFromMCU(data) {
       });
       await task.save();
       console.log(`🆕 New task created: ${data.taskId} with ${data.maps.length} maps`);
+      // 🔴 EMIT LIVE TASK DATA
+      io.emit('taskUpdate', task);
     } else {
       // Update existing task with new maps
       existingTask.maps = data.maps;
       existingTask.taskName = data.taskName;
       await existingTask.save();
       console.log(`🔄 Task updated: ${data.taskId} with ${data.maps.length} maps`);
+      // 🔴 EMIT LIVE TASK DATA
+      io.emit('taskUpdate', existingTask);
     }
   }
   
@@ -238,6 +254,9 @@ async function createAlert(type, message, severity = 'info', data = null) {
   });
   await alert.save();
   console.log(`🚨 Alert created: ${type} - ${message}`);
+  
+  // 🔴 EMIT LIVE ALERT TO ALL CLIENTS
+  io.emit('newAlert', alert);
   
   // Keep only latest 50 alerts in database
   const alertCount = await Alert.countDocuments();
@@ -470,4 +489,4 @@ app.post("/send", (req, res) => {
 
 // --- Start server ---
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
