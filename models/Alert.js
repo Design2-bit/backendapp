@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const alertSchema = new mongoose.Schema({
   type: { 
     type: String, 
-    enum: ['low_battery', 'path_obstacle', 'mission_complete', 'system_error'], 
+    enum: ['low_battery', 'path_obstacle', 'mission_complete', 'system_error', 'heartbeat', 'mission_started', 'dock_command', 'dock_complete'], 
     required: true 
   },
   message: { type: String, required: true },

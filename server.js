@@ -154,9 +154,9 @@ async function handleStatusFromMCU(data) {
     // 🔴 EMIT LIVE DATA TO ALL CONNECTED CLIENTS
     io.emit('robotStatus', status);
     
-    // Keep only last 20 status records
+    // Keep only last 10 status records
     const statusCount = await RobotStatus.countDocuments();
-    if (statusCount > 20) {
+    if (statusCount > 10) {
       const statusToDelete = statusCount - 10;
       const oldestStatus = await RobotStatus.find().sort({ lastUpdated: 1 }).limit(statusToDelete);
       const idsToDelete = oldestStatus.map(status => status._id);
@@ -258,9 +258,9 @@ async function createAlert(type, message, severity = 'info', data = null) {
   // 🔴 EMIT LIVE ALERT TO ALL CLIENTS
   io.emit('newAlert', alert);
   
-  // Keep only latest 50 alerts in database
+  // Keep only latest 10 alerts in database
   const alertCount = await Alert.countDocuments();
-  if (alertCount > 50) {
+  if (alertCount > 10) {
     const alertsToDelete = alertCount - 10;
     const oldestAlerts = await Alert.find().sort({ createdAt: 1 }).limit(alertsToDelete);
     const idsToDelete = oldestAlerts.map(alert => alert._id);
