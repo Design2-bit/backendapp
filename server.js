@@ -436,19 +436,26 @@ app.patch("/alerts/:id/resolve", async (req, res) => {
 // Check if mission is completed (for clearing map)
 app.get("/mission/status", async (req, res) => {
   try {
+    // Check for mission_complete alerts in last 10 minutes
     const completedAlert = await Alert.findOne({ 
       type: 'mission_complete',
-      createdAt: { $gte: new Date(Date.now() - 300000) } // Within last 5 minutes
+      createdAt: { $gte: new Date(Date.now() - 600000) } // Within last 10 minutes
     }).sort({ createdAt: -1 });
     
+    // Also check all recent alerts for debugging
+    const recentAlerts = await Alert.find({}).sort({ createdAt: -1 }).limit(5);
+    
     console.log(`🔍 Checking mission status - Found alert:`, !!completedAlert);
+    console.log(`🔍 Recent alerts:`, recentAlerts.map(a => ({ type: a.type, message: a.message, time: a.createdAt })));
+    
     if (completedAlert) {
       console.log(`🔍 Alert details:`, completedAlert.message, completedAlert.createdAt);
     }
     
     res.json({ 
       missionCompleted: !!completedAlert,
-      lastCompletedAt: completedAlert?.createdAt 
+      lastCompletedAt: completedAlert?.createdAt,
+      recentAlerts: recentAlerts.map(a => ({ type: a.type, message: a.message, time: a.createdAt }))
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
