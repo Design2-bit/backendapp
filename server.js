@@ -6,6 +6,7 @@ const mqtt = require("mqtt");
 const cors = require("cors");
 const http = require('http');
 const socketIo = require('socket.io');
+const WebSocket = require('ws');
 
 const authRoutes = require("./routes/auth");
 const profileRoutes = require("./routes/profile");
@@ -27,6 +28,16 @@ const io = socketIo(server, {
 // --- Middleware ---
 app.use(cors());
 app.use(express.json());
+
+// Serve static map images
+app.use('/maps', express.static('uploads/maps'));
+
+// Map ID to image URL mapping
+const MAP_IMAGES = {
+  "M001": "https://backendapp-zduc.onrender.com/maps/my_map.png",
+  "M002": "https://backendapp-zduc.onrender.com/maps/my_map1.png", 
+  "M003": "https://backendapp-zduc.onrender.com/maps/my_map4.png"
+};
 
 // --- MongoDB connection ---
 mongoose
@@ -52,6 +63,10 @@ app.use((req, res, next) => {
   console.log(`${req.method} ${req.path}`);
   next();
 });
+
+// --- Pi Communication Variables ---
+let pendingCommand = null;
+let commandId = 0;
 
 // --- Routes ---
 app.use("/auth", authRoutes);
@@ -154,6 +169,15 @@ async function handleStatusFromMCU(data) {
     // 🔴 EMIT LIVE DATA TO ALL CONNECTED CLIENTS
     io.emit('robotStatus', status);
     
+    // 🔴 EMIT LIVE MAP DATA
+    const mapUpdate = {
+      robotPosition: data.position,
+      batteryLevel: data.batteryPercent,
+      isActive: data.isActive,
+      timestamp: new Date()
+    };
+    io.emit('mapUpdate', mapUpdate);
+    
     // Keep only last 10 status records
     const statusCount = await RobotStatus.countDocuments();
     if (statusCount > 10) {
@@ -181,6 +205,11 @@ async function handleTaskUpdateFromMCU(data) {
   
   // If MCU sends new task data, store it
   if (data.taskId && data.taskName && data.maps) {
+    // Add imageUrl to maps
+    data.maps.forEach(map => {
+      map.imageUrl = MAP_IMAGES[map.mapId] || null;
+    });
+    
     const existingTask = await Task.findOne({ taskId: data.taskId });
     
     if (!existingTask) {
@@ -318,24 +347,21 @@ app.get("/debug/tasks", async (req, res) => {
   }
 });
 
-// Start mission with selected map (send action to robot)
+// Start mission - queue for Pi
 app.post("/robot/mission/start/:taskId", async (req, res) => {
   try {
     const { taskId } = req.params;
     const { selectedMapIndex } = req.body;
     
     const task = await Task.findOne({ taskId });
-    if (!task) {
-      return res.status(404).json({ error: "Task not found" });
-    }
-    
-    if (selectedMapIndex === undefined || !task.maps[selectedMapIndex]) {
-      return res.status(400).json({ error: "Invalid map selection" });
+    if (!task || !task.maps[selectedMapIndex]) {
+      return res.status(404).json({ error: "Task or map not found" });
     }
     
     const selectedMap = task.maps[selectedMapIndex];
     
-    const actionMessage = {
+    commandId++;
+    pendingCommand = {
       action: "start_mission",
       taskId,
       taskName: task.taskName,
@@ -344,24 +370,17 @@ app.post("/robot/mission/start/:taskId", async (req, res) => {
         mapName: selectedMap.mapName,
         pick: selectedMap.pick,
         drop: selectedMap.drop
-      },
-      timestamp: new Date().toISOString()
-    };
-
-    mqttClient.publish(TOPICS.ACTION.name, JSON.stringify(actionMessage), { qos: TOPICS.ACTION.qos }, (err) => {
-      if (err) {
-        return res.status(500).json({ error: "Failed to start mission" });
       }
-      console.log(`📤 Mission started: ${taskId} with map: ${selectedMap.mapName}`);
-    });
+    };
     
-    res.json({ success: true, message: "Mission start command sent with selected map" });
+    console.log(`📤 Mission queued for Pi: ${taskId}`);
+    res.json({ success: true, message: "Mission queued for robot" });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Send action command to robot
+// Send action command to robot (keep for MQTT compatibility)
 app.post("/robot/action", (req, res) => {
   const { action, value } = req.body;
   
@@ -380,21 +399,13 @@ app.post("/robot/action", (req, res) => {
   });
 });
 
-// Docking station command
+// Dock command - queue for Pi
 app.post("/robot/dock", (req, res) => {
-  const actionMessage = {
-    action: "return_to_dock",
-    command: "dock_station",
-    timestamp: new Date().toISOString()
-  };
-
-  mqttClient.publish(TOPICS.ACTION.name, JSON.stringify(actionMessage), { qos: TOPICS.ACTION.qos }, (err) => {
-    if (err) {
-      return res.status(500).json({ error: "Failed to send dock command" });
-    }
-    console.log(`🏠 Dock command sent to MCU`);
-    res.json({ success: true, message: "Robot returning to dock station" });
-  });
+  commandId++;
+  pendingCommand = { action: "return_to_dock" };
+  
+  console.log(`🏠 Dock command queued for Pi`);
+  res.json({ success: true, message: "Dock command queued" });
 });
 
 // Get robot status from database
@@ -402,6 +413,30 @@ app.get("/robot/status", async (req, res) => {
   try {
     const status = await RobotStatus.findOne().sort({ lastUpdated: -1 });
     res.json({ status: status || "No status received" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get live map data for mobile app
+app.get("/robot/map", async (req, res) => {
+  try {
+    const status = await RobotStatus.findOne().sort({ lastUpdated: -1 });
+    const mapData = {
+      robotPosition: status?.position || { x: 0, y: 0 },
+      batteryLevel: status?.batteryPercent || "0%",
+      isActive: status?.isActive || false,
+      stations: [
+        { id: "A1", name: "Station A1", x: 2.0, y: 1.0, status: "available" },
+        { id: "A2", name: "Station A2", x: 3.0, y: 2.0, status: "available" },
+        { id: "B1", name: "Station B1", x: 5.0, y: 3.0, status: "available" },
+        { id: "B2", name: "Station B2", x: 6.0, y: 4.0, status: "available" },
+        { id: "dock", name: "Dock", x: 0.0, y: 0.0, status: "dock" }
+      ],
+      mapBounds: { minX: -1, maxX: 7, minY: -1, maxY: 5 },
+      lastUpdated: status?.lastUpdated || new Date()
+    };
+    res.json(mapData);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -494,6 +529,141 @@ app.post("/send", (req, res) => {
   });
 });
 
+// --- Pi Communication Endpoints ---
+
+// Pi checks for commands
+app.get("/robot/pending_commands", (req, res) => {
+  if (pendingCommand) {
+    res.json({ has_command: true, command: pendingCommand, command_id: commandId });
+  } else {
+    res.json({ has_command: false });
+  }
+});
+
+// Pi confirms command processed
+app.post("/robot/command_processed", (req, res) => {
+  pendingCommand = null;
+  console.log(`✅ Command processed by Pi`);
+  res.json({ success: true });
+});
+
+// Pi sends robot status
+app.post("/robot/status_update", (req, res) => {
+  console.log(`📡 Status from Pi:`, req.body);
+  io.emit('robotStatusFromPi', req.body);
+  res.json({ success: true });
+});
+
+// Start mission with selected map (send action to robot)
+app.post("/robot/mission/start/:taskId", async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const { selectedMapIndex } = req.body;
+    
+    const task = await Task.findOne({ taskId });
+    if (!task) {
+      return res.status(404).json({ error: "Task not found" });
+    }
+    
+    if (selectedMapIndex === undefined || !task.maps[selectedMapIndex]) {
+      return res.status(400).json({ error: "Invalid map selection" });
+    }
+    
+    const selectedMap = task.maps[selectedMapIndex];
+    
+    const actionMessage = {
+      action: "start_mission",
+      taskId,
+      taskName: task.taskName,
+      selectedMap: {
+        mapId: selectedMap.mapId,
+        mapName: selectedMap.mapName,
+        pick: selectedMap.pick,
+        drop: selectedMap.drop
+      },
+      timestamp: new Date().toISOString()
+    };
+
+    mqttClient.publish(TOPICS.ACTION.name, JSON.stringify(actionMessage), { qos: TOPICS.ACTION.qos }, (err) => {
+      if (err) {
+        return res.status(500).json({ error: "Failed to start mission" });
+      }
+      console.log(`📤 Mission started: ${taskId} with map: ${selectedMap.mapName}`);
+    });
+    
+    res.json({ success: true, message: "Mission start command sent with selected map" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Docking station command
+app.post("/robot/dock", (req, res) => {
+  const actionMessage = {
+    action: "return_to_dock",
+    command: "dock_station",
+    timestamp: new Date().toISOString()
+  };
+
+  mqttClient.publish(TOPICS.ACTION.name, JSON.stringify(actionMessage), { qos: TOPICS.ACTION.qos }, (err) => {
+    if (err) {
+      return res.status(500).json({ error: "Failed to send dock command" });
+    }
+    console.log(`🏠 Dock command sent to MCU`);
+    res.json({ success: true, message: "Robot returning to dock station" });
+  });
+});
+
+// Create WebSocket server for ROS2 bridge
+const wss = new WebSocket.Server({ port: 8080 });
+
+wss.on('connection', (ws) => {
+  console.log('🔗 ROS2 bridge connected');
+  
+  ws.on('message', (data) => {
+    try {
+      const message = JSON.parse(data);
+      
+      if (message.type === 'robot_position') {
+        // Update robot position in database
+        updateRobotPosition(message.x, message.y);
+        
+        // Broadcast to mobile clients
+        io.emit('livePosition', {
+          x: message.x,
+          y: message.y,
+          timestamp: message.timestamp
+        });
+      }
+    } catch (error) {
+      console.error('WebSocket message error:', error);
+    }
+  });
+  
+  ws.on('close', () => {
+    console.log('🔌 ROS2 bridge disconnected');
+  });
+});
+
+async function updateRobotPosition(x, y) {
+  try {
+    await RobotStatus.findOneAndUpdate(
+      {},
+      { 
+        position: { x, y },
+        lastUpdated: new Date()
+      },
+      { upsert: true }
+    );
+    console.log(`📍 Position updated: x=${x}, y=${y}`);
+  } catch (error) {
+    console.error('Error updating position:', error);
+  }
+}
+
 // --- Start server ---
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+server.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🔗 WebSocket server running on port 8080`);
+});
