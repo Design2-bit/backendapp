@@ -8,7 +8,8 @@ const taskSchema = new mongoose.Schema({
       mapId: { type: String, required: true },
       mapName: { type: String, required: true },
       pick: { type: String, required: true },
-      drop: { type: String, required: true }
+      drop: { type: String, required: true },
+      imageUrl: { type: String }
     }],
     validate: {
       validator: function(maps) {
