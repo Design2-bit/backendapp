@@ -347,38 +347,7 @@ app.get("/debug/tasks", async (req, res) => {
   }
 });
 
-// Start mission - queue for Pi
-app.post("/robot/mission/start/:taskId", async (req, res) => {
-  try {
-    const { taskId } = req.params;
-    const { selectedMapIndex } = req.body;
-    
-    const task = await Task.findOne({ taskId });
-    if (!task || !task.maps[selectedMapIndex]) {
-      return res.status(404).json({ error: "Task or map not found" });
-    }
-    
-    const selectedMap = task.maps[selectedMapIndex];
-    
-    commandId++;
-    pendingCommand = {
-      action: "start_mission",
-      taskId,
-      taskName: task.taskName,
-      selectedMap: {
-        mapId: selectedMap.mapId,
-        mapName: selectedMap.mapName,
-        pick: selectedMap.pick,
-        drop: selectedMap.drop
-      }
-    };
-    
-    console.log(`📤 Mission queued for Pi: ${taskId}`);
-    res.json({ success: true, message: "Mission queued for robot" });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+
 
 // Send action command to robot (keep for MQTT compatibility)
 app.post("/robot/action", (req, res) => {
@@ -399,14 +368,7 @@ app.post("/robot/action", (req, res) => {
   });
 });
 
-// Dock command - queue for Pi
-app.post("/robot/dock", (req, res) => {
-  commandId++;
-  pendingCommand = { action: "return_to_dock" };
-  
-  console.log(`🏠 Dock command queued for Pi`);
-  res.json({ success: true, message: "Dock command queued" });
-});
+
 
 // Get robot status from database
 app.get("/robot/status", async (req, res) => {
