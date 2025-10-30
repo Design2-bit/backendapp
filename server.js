@@ -541,14 +541,7 @@ app.post("/robot/mission/start/:taskId", async (req, res) => {
         mapId: selectedMap.mapId,
         mapName: selectedMap.mapName,
         pick: selectedMap.pick,
-        drop: selectedMap.drop,
-        imageUrl: selectedMap.imageUrl
-      },
-      fullTask: {
-        taskId: task.taskId,
-        taskName: task.taskName,
-        maps: task.maps,
-        selectedMapIndex
+        drop: selectedMap.drop
       },
       timestamp: new Date().toISOString()
     };
