@@ -623,6 +623,25 @@ async function updateRobotPosition(x, y) {
   }
 }
 
+// Receive live map image from ROS2
+app.post("/robot/live_map", (req, res) => {
+  try {
+    const { mapImage, taskId, mapId } = req.body;
+    
+    // Broadcast live map to all connected clients
+    io.emit('liveMapUpdate', {
+      mapImage: `data:image/png;base64,${mapImage}`,
+      taskId: taskId,
+      mapId: mapId,
+      timestamp: new Date()
+    });
+    
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // --- Start server ---
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
