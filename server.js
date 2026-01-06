@@ -385,17 +385,21 @@ app.get("/robot/map", async (req, res) => {
   try {
     const status = await RobotStatus.findOne().sort({ lastUpdated: -1 });
     const mapData = {
-      robotPosition: status?.position || { x: 0, y: 0 },
+      robotPosition: status?.position || { x: 120, y: 65 },
       batteryLevel: status?.batteryPercent || "0%",
       isActive: status?.isActive || false,
       stations: [
-        { id: "A1", name: "Station A1", x: 2.0, y: 1.0, status: "available" },
-        { id: "A2", name: "Station A2", x: 3.0, y: 2.0, status: "available" },
-        { id: "B1", name: "Station B1", x: 5.0, y: 3.0, status: "available" },
-        { id: "B2", name: "Station B2", x: 6.0, y: 4.0, status: "available" },
-        { id: "dock", name: "Dock", x: 0.0, y: 0.0, status: "dock" }
+        { id: "A1", name: "Station A1", x: 3, y: 0, status: "available" },
+        { id: "A2", name: "Station A2", x: 3, y: 0, status: "available" },
+        { id: "B1", name: "Station B1", x: 3, y: 2, status: "available" },
+        { id: "B2", name: "Station B2", x: 3, y: 2, status: "available" },
+        { id: "loading", name: "Loading Bay", x: 3, y: 0, status: "available" },
+        { id: "storage", name: "Storage Area", x: 3, y: 2, status: "available" },
+        { id: "reception", name: "Reception", x: 3, y: 0, status: "available" },
+        { id: "conference", name: "Conference Room", x: 3, y: 2, status: "available" },
+        { id: "dock", name: "Dock", x: 0, y: 0, status: "dock" }
       ],
-      mapBounds: { minX: -1, maxX: 7, minY: -1, maxY: 5 },
+      mapBounds: { minX: 0, maxX: 150, minY: 0, maxY: 100 },
       lastUpdated: status?.lastUpdated || new Date()
     };
     res.json(mapData);
@@ -661,7 +665,10 @@ app.post("/robot/navigation_complete", (req, res) => {
 
 // Live position updates from ROS2
 app.post("/robot/live_position", (req, res) => {
-  const { x, y, z, timestamp } = req.body;
+  const { x, y, z, timestamp, raw_x, raw_y } = req.body;
+  
+  // Debug logging
+  console.log(`🤖 Position Update: ROS2(${raw_x}, ${raw_y}) → App(${x}, ${y})`);
   
   // Emit live position to mobile app
   io.emit('livePosition', { x, y, z, timestamp });
