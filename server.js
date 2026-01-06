@@ -642,6 +642,33 @@ app.post("/robot/live_map", (req, res) => {
   }
 });
 
+// Navigation completion from ROS2
+app.post("/robot/navigation_complete", (req, res) => {
+  const { type, message, severity, position } = req.body;
+  
+  // Create alert for mission completion
+  createAlert(type, message, severity, position);
+  
+  // Emit to mobile app via Socket.IO
+  io.emit('navigationComplete', {
+    message: message,
+    position: position,
+    timestamp: new Date()
+  });
+  
+  res.json({ success: true });
+});
+
+// Live position updates from ROS2
+app.post("/robot/live_position", (req, res) => {
+  const { x, y, z, timestamp } = req.body;
+  
+  // Emit live position to mobile app
+  io.emit('livePosition', { x, y, z, timestamp });
+  
+  res.json({ success: true });
+});
+
 // --- Start server ---
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
