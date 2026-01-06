@@ -243,9 +243,9 @@ async function handleTaskUpdateFromMCU(data) {
     } else if (data.status === 'completed' || data.status === 'failed') {
       updateData.completedAt = new Date();
       
-      if (data.status === 'completed') {
-        await createAlert('mission_complete', `Task ${data.taskId} completed successfully`, 'info', data);
-      }
+     // if (data.status === 'completed') {
+        // await createAlert('mission_complete', `Task ${data.taskId} completed successfully`, 'info', data);
+    //  }
     }
     
     await Task.findOneAndUpdate(
@@ -264,7 +264,7 @@ async function handleActionResponseFromMCU(data) {
 // Handle alerts FROM microcontroller
 async function handleAlertFromMCU(data) {
   console.log(`🚨 Alert from MCU:`, data);
-  await createAlert(data.type, data.message, data.severity, data.data);
+  // await createAlert(data.type, data.message, data.severity, data.data);
   
   // If mission completed, notify to clear map selection
   if (data.type === 'mission_complete') {
@@ -284,8 +284,8 @@ async function createAlert(type, message, severity = 'info', data = null) {
   await alert.save();
   console.log(`🚨 Alert created: ${type} - ${message}`);
   
-  // 🔴 EMIT LIVE ALERT TO ALL CLIENTS
-  io.emit('newAlert', alert);
+  // 🔴 EMIT LIVE ALERT TO ALL CLIENTS - COMMENTED OUT TO PREVENT TASK COMPLETION MESSAGES
+  // io.emit('newAlert', alert);
   
   // Keep only latest 10 alerts in database
   const alertCount = await Alert.countDocuments();
@@ -651,14 +651,14 @@ app.post("/robot/navigation_complete", (req, res) => {
   const { type, message, severity, position } = req.body;
   
   // Create alert for mission completion
-  createAlert(type, message, severity, position);
+  // createAlert(type, message, severity, position);
   
   // Emit to mobile app via Socket.IO
-  io.emit('navigationComplete', {
-    message: message,
-    position: position,
-    timestamp: new Date()
-  });
+  // io.emit('navigationComplete', {
+  //   message: message,
+  //   position: position,
+  //   timestamp: new Date()
+  // });
   
   res.json({ success: true });
 });
