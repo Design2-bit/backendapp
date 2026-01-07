@@ -385,7 +385,7 @@ app.get("/robot/map", async (req, res) => {
   try {
     const status = await RobotStatus.findOne().sort({ lastUpdated: -1 });
     const mapData = {
-      robotPosition: status?.position || { x: 120, y: 65 },
+      robotPosition: status?.position || { x: 3, y: 0 },
       batteryLevel: status?.batteryPercent || "0%",
       isActive: status?.isActive || false,
       stations: [
@@ -399,7 +399,7 @@ app.get("/robot/map", async (req, res) => {
         { id: "conference", name: "Conference Room", x: 3, y: 2, status: "available" },
         { id: "dock", name: "Dock", x: 0, y: 0, status: "dock" }
       ],
-      mapBounds: { minX: 0, maxX: 150, minY: 0, maxY: 100 },
+      mapBounds: { minX: 0, maxX: 10, minY: 0, maxY: 10 },
       lastUpdated: status?.lastUpdated || new Date()
     };
     res.json(mapData);
