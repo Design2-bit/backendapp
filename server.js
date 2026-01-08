@@ -385,21 +385,21 @@ app.get("/robot/map", async (req, res) => {
   try {
     const status = await RobotStatus.findOne().sort({ lastUpdated: -1 });
     const mapData = {
-      robotPosition: status?.position || { x: 3, y: 0 },
+      robotPosition: status?.position || { x: 120, y: 65 },
       batteryLevel: status?.batteryPercent || "0%",
       isActive: status?.isActive || false,
       stations: [
-        { id: "A1", name: "Station A1", x: 3, y: 0, status: "available" },
-        { id: "A2", name: "Station A2", x: 3, y: 0, status: "available" },
-        { id: "B1", name: "Station B1", x: 3, y: 2, status: "available" },
-        { id: "B2", name: "Station B2", x: 3, y: 2, status: "available" },
-        { id: "loading", name: "Loading Bay", x: 3, y: 0, status: "available" },
-        { id: "storage", name: "Storage Area", x: 3, y: 2, status: "available" },
-        { id: "reception", name: "Reception", x: 3, y: 0, status: "available" },
-        { id: "conference", name: "Conference Room", x: 3, y: 2, status: "available" },
+        { id: "A1", name: "Station A1", x: 30, y: 10, status: "available" },
+        { id: "A2", name: "Station A2", x: 30, y: 10, status: "available" },
+        { id: "B1", name: "Station B1", x: 35, y: 25, status: "available" },
+        { id: "B2", name: "Station B2", x: 35, y: 25, status: "available" },
+        { id: "loading", name: "Loading Bay", x: 30, y: 10, status: "available" },
+        { id: "storage", name: "Storage Area", x: 35, y: 25, status: "available" },
+        { id: "reception", name: "Reception", x: 30, y: 10, status: "available" },
+        { id: "conference", name: "Conference Room", x: 35, y: 25, status: "available" },
         { id: "dock", name: "Dock", x: 0, y: 0, status: "dock" }
       ],
-      mapBounds: { minX: 0, maxX: 10, minY: 0, maxY: 10 },
+      mapBounds: { minX: 0, maxX: 150, minY: 0, maxY: 100 },
       lastUpdated: status?.lastUpdated || new Date()
     };
     res.json(mapData);
@@ -627,22 +627,76 @@ async function updateRobotPosition(x, y) {
   }
 }
 
+// Store latest live map data for Google Maps-like functionality
+let latestLiveMapData = null;
+
 // Receive live map image from ROS2
 app.post("/robot/live_map", (req, res) => {
   try {
-    const { mapImage, taskId, mapId } = req.body;
+    const { mapImage, taskId, mapId, robotPosition, viewportInfo, mapInfo } = req.body;
     
-    // Broadcast live map to all connected clients
+    // Store latest map data with viewport information
+    latestLiveMapData = {
+      mapImage: mapImage,
+      robotPosition: robotPosition || { x: 0, y: 0, z: 0 },
+      viewportInfo: viewportInfo || { robotScreenX: 200, robotScreenY: 200, viewportSize: { width: 400, height: 400 } },
+      mapInfo: mapInfo,
+      taskId: taskId,
+      mapId: mapId,
+      timestamp: new Date(),
+      receivedAt: new Date().toISOString()
+    };
+    
+    // Broadcast live map with Google Maps-like data to all connected clients
     io.emit('liveMapUpdate', {
       mapImage: `data:image/png;base64,${mapImage}`,
+      robotPosition: robotPosition,
+      viewportInfo: viewportInfo,
+      mapInfo: mapInfo,
       taskId: taskId,
       mapId: mapId,
       timestamp: new Date()
     });
     
+    console.log(`📸 Live map received for task ${taskId} - Robot at (${robotPosition?.x}, ${robotPosition?.y})`);
+    
     res.json({ success: true });
   } catch (error) {
+    console.error('Live map processing error:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Serve live map data for Google Maps-like frontend
+app.get("/robot/live_map_data", (req, res) => {
+  try {
+    if (!latestLiveMapData) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'No live map data available' 
+      });
+    }
+    
+    // Check if data is recent (within last 10 seconds)
+    const dataAge = Date.now() - new Date(latestLiveMapData.receivedAt).getTime();
+    const isDataFresh = dataAge < 10000; // 10 seconds
+    
+    res.json({
+      success: true,
+      mapImage: latestLiveMapData.mapImage,
+      robotPosition: latestLiveMapData.robotPosition,
+      viewportInfo: latestLiveMapData.viewportInfo,
+      mapInfo: latestLiveMapData.mapInfo,
+      taskId: latestLiveMapData.taskId,
+      mapId: latestLiveMapData.mapId,
+      timestamp: latestLiveMapData.timestamp,
+      dataAge: dataAge,
+      isDataFresh: isDataFresh
+    });
+    
+  } catch (error) {
+    console.error('Error serving live map data:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
