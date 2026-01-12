@@ -264,6 +264,13 @@ async function handleActionResponseFromMCU(data) {
 // Handle alerts FROM microcontroller
 async function handleAlertFromMCU(data) {
   console.log(`🚨 Alert from MCU:`, data);
+  
+  // Filter out navigation success messages
+  if (data.message === 'Navigation goal reached successfully') {
+    console.log('🔇 Filtered out navigation success message');
+    return;
+  }
+  
   // await createAlert(data.type, data.message, data.severity, data.data);
   
   // If mission completed, notify to clear map selection
