@@ -630,29 +630,29 @@ async function updateRobotPosition(x, y) {
 // Store latest live map data for Google Maps-like functionality
 let latestLiveMapData = null;
 
-// Receive live map image from ROS2
+// Receive live map image from ROS2 with RViz metadata
 app.post("/robot/live_map", (req, res) => {
   try {
-    const { mapImage, taskId, mapId, robotPosition, viewportInfo, mapInfo } = req.body;
+    const { mapImage, taskId, mapId, robotPosition, robotPixelPosition, mapMetadata, timestamp } = req.body;
     
-    // Store latest map data with viewport information
+    // Store latest map data with RViz metadata
     latestLiveMapData = {
       mapImage: mapImage,
       robotPosition: robotPosition || { x: 0, y: 0, z: 0 },
-      viewportInfo: viewportInfo || { robotScreenX: 200, robotScreenY: 200, viewportSize: { width: 400, height: 400 } },
-      mapInfo: mapInfo,
+      robotPixelPosition: robotPixelPosition || { x: 200, y: 200 },
+      mapMetadata: mapMetadata || null,
       taskId: taskId,
       mapId: mapId,
       timestamp: new Date(),
       receivedAt: new Date().toISOString()
     };
     
-    // Broadcast live map with Google Maps-like data to all connected clients
+    // Broadcast live map with RViz metadata to all connected clients
     io.emit('liveMapUpdate', {
       mapImage: `data:image/png;base64,${mapImage}`,
       robotPosition: robotPosition,
-      viewportInfo: viewportInfo,
-      mapInfo: mapInfo,
+      robotPixelPosition: robotPixelPosition,
+      mapMetadata: mapMetadata,
       taskId: taskId,
       mapId: mapId,
       timestamp: new Date()
@@ -667,7 +667,7 @@ app.post("/robot/live_map", (req, res) => {
   }
 });
 
-// Serve live map data for Google Maps-like frontend
+// Serve live map data with RViz metadata
 app.get("/robot/live_map_data", (req, res) => {
   try {
     if (!latestLiveMapData) {
@@ -685,8 +685,8 @@ app.get("/robot/live_map_data", (req, res) => {
       success: true,
       mapImage: latestLiveMapData.mapImage,
       robotPosition: latestLiveMapData.robotPosition,
-      viewportInfo: latestLiveMapData.viewportInfo,
-      mapInfo: latestLiveMapData.mapInfo,
+      robotPixelPosition: latestLiveMapData.robotPixelPosition,
+      mapMetadata: latestLiveMapData.mapMetadata,
       taskId: latestLiveMapData.taskId,
       mapId: latestLiveMapData.mapId,
       timestamp: latestLiveMapData.timestamp,
@@ -717,17 +717,45 @@ app.post("/robot/navigation_complete", (req, res) => {
   res.json({ success: true });
 });
 
-// Live position updates from ROS2
-app.post("/robot/live_position", (req, res) => {
-  const { x, y, z, timestamp, raw_x, raw_y } = req.body;
-  
-  // Debug logging
-  console.log(`🤖 Position Update: ROS2(${raw_x}, ${raw_y}) → App(${x}, ${y})`);
-  
-  // Emit live position to mobile app
-  io.emit('livePosition', { x, y, z, timestamp });
-  
-  res.json({ success: true });
+// High-frequency position updates from ROS2 (20Hz)
+app.post("/robot/position", (req, res) => {
+  try {
+    const { robotPosition, robotPixelPosition, mapMetadata, timestamp } = req.body;
+    
+    // Emit real-time position to mobile app
+    io.emit('livePosition', robotPosition);
+    
+    // Debug logging for RViz coordinate transformation
+    if (robotPosition && robotPixelPosition) {
+      console.log(`🤖 RViz Position: World(${robotPosition.x?.toFixed(3)}, ${robotPosition.y?.toFixed(3)}) → Pixel(${robotPixelPosition.x?.toFixed(1)}, ${robotPixelPosition.y?.toFixed(1)})`);
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Position update error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ROS2 system status monitoring
+app.post("/robot/ros_status", (req, res) => {
+  try {
+    const { slam_running, amcl_running, map_publisher_running } = req.body;
+    
+    // Emit ROS2 system status to mobile app
+    io.emit('rosStatus', {
+      slam_running,
+      amcl_running,
+      map_publisher_running
+    });
+    
+    console.log(`🔧 ROS2 Status: SLAM=${slam_running}, AMCL=${amcl_running}, MapPub=${map_publisher_running}`);
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('ROS2 status error:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // --- Start server ---
