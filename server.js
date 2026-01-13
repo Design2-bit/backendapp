@@ -729,12 +729,19 @@ app.post("/robot/position", (req, res) => {
   try {
     const { robotPosition, robotPixelPosition, mapMetadata, timestamp } = req.body;
     
-    // Emit real-time position to mobile app
-    io.emit('livePosition', robotPosition);
-    
-    // Debug logging for RViz coordinate transformation
+    // Forward position data to mobile app via Socket.IO
     if (robotPosition && robotPixelPosition) {
-      console.log(`🤖 RViz Position: World(${robotPosition.x?.toFixed(3)}, ${robotPosition.y?.toFixed(3)}) → Pixel(${robotPixelPosition.x?.toFixed(1)}, ${robotPixelPosition.y?.toFixed(1)})`);
+      io.emit('livePosition', {
+        ...robotPosition,
+        pixelX: robotPixelPosition.x,
+        pixelY: robotPixelPosition.y
+      });
+      
+      console.log(`🤖 Position forwarded: World(${robotPosition.x?.toFixed(3)}, ${robotPosition.y?.toFixed(3)}) → Pixel(${robotPixelPosition.x?.toFixed(1)}, ${robotPixelPosition.y?.toFixed(1)})`);
+    } else if (robotPosition) {
+      // Fallback to just world coordinates
+      io.emit('livePosition', robotPosition);
+      console.log(`🤖 Position forwarded: (${robotPosition.x?.toFixed(3)}, ${robotPosition.y?.toFixed(3)})`);
     }
     
     res.json({ success: true });
