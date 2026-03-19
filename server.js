@@ -40,13 +40,25 @@ const MAP_IMAGES = {
 };
 
 // --- MongoDB connection ---
-mongoose
-  .connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
-  .then(() => console.log("✅ MongoDB connected"))
-  .catch((err) => console.error("❌ MongoDB error:", err));
+mongoose.set('bufferTimeoutMS', 60000);
+
+const connectWithRetry = () => {
+  mongoose
+    .connect(process.env.MONGO_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 60000,
+      socketTimeoutMS: 60000,
+    })
+    .then(() => console.log("✅ MongoDB connected"))
+    .catch((err) => {
+      console.error("❌ MongoDB error:", err);
+      console.log("🔄 Retrying MongoDB connection in 5 seconds...");
+      setTimeout(connectWithRetry, 5000);
+    });
+};
+
+connectWithRetry();
 
 // --- Test route ---
 app.get("/test", (req, res) => {
